@@ -5,10 +5,17 @@ export default async function handler(req, res) {
 
   const { symbol, from, to } = req.body;
 
+  // 加上 User-Agent 偽裝成正常瀏覽器，避免被 Yahoo 擋下
+  const fetchOptions = {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+  };
+
   try {
-    // 1. 抓取 Yahoo Finance 歷史股價 (主要功能)
+    // 1. 抓取 Yahoo Finance 歷史股價
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${from}&period2=${to}&interval=1d`;
-    const chartResponse = await fetch(chartUrl);
+    const chartResponse = await fetch(chartUrl, fetchOptions);
     const chartResult = await chartResponse.json();
 
     if (!chartResponse.ok || !chartResult.chart.result) {
@@ -20,7 +27,7 @@ export default async function handler(req, res) {
     let sharesOutstanding = null;
     try {
       const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
-      const quoteRes = await fetch(quoteUrl);
+      const quoteRes = await fetch(quoteUrl, fetchOptions);
       const quoteData = await quoteRes.json();
       if (quoteData.quoteResponse?.result?.[0]?.sharesOutstanding) {
         sharesOutstanding = quoteData.quoteResponse.result[0].sharesOutstanding;
@@ -33,24 +40,32 @@ export default async function handler(req, res) {
     let btcHoldings = null;
     try {
       const cgRes = await fetch('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
-      const cgData = await cgRes.json();
-      // 在列表中尋找對應的股票代號
-      const treasury = cgData.companies?.find(c => c.symbol.toLowerCase() === symbol.toLowerCase());
-      if (treasury && treasury.total_holdings) {
-        btcHoldings = treasury.total_holdings;
+      if (cgRes.ok) {
+        const cgData = await cgRes.json();
+        const treasury = cgData.companies?.find(c => c.symbol.toLowerCase() === symbol.toLowerCase());
+        if (treasury && treasury.total_holdings) {
+          btcHoldings = treasury.total_holdings;
+        }
       }
     } catch (e) {
       console.error("CoinGecko 持倉抓取失敗:", e);
     }
 
-    // 4. 統一打包傳回給前端
+    // 定義各公司的備用預設值 (如果 API 臨時壞掉，網頁才不會整組當掉)
+    const fallbacks = {
+      'MSTR': { shares: 279300000, btc: 214400 },
+      'MARA': { shares: 320000000, btc: 26842 },
+      'RIOT': { shares: 310000000, btc: 9024 }
+    };
+
+    // 4. 統一打包傳回給前端 (如果有抓到就用動態的，沒抓到就用備用值)
     const formattedData = {
       s: "ok",
       t: chart.timestamp,
       c: chart.indicators.quote[0].close,
       info: {
-        sharesOutstanding: sharesOutstanding,
-        btcHoldings: btcHoldings
+        sharesOutstanding: sharesOutstanding || fallbacks[symbol.toUpperCase()]?.shares,
+        btcHoldings: btcHoldings || fallbacks[symbol.toUpperCase()]?.btc
       }
     };
 

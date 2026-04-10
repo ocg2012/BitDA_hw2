@@ -168,50 +168,60 @@
         }
 
         function processCompanyData(stockData) {
-            const dates = [], btcPrices = [], premiums = [], discounts = [], stockPrices = [], mnavs = [];
-            const profile = companyProfiles[currentCompany];
+    const dates = [], btcPrices = [], premiums = [], discounts = [], stockPrices = [], mnavs = [];
+    
+    // 取得原本寫死的基本資料 (僅用作保留公司名稱)
+    const staticProfile = companyProfiles[currentCompany];
 
-            const stockMap = {};
-            if (stockData && stockData.s === "ok") {
-                for (let i = 0; i < stockData.t.length; i++) {
-                    const dateStr = new Date(stockData.t[i] * 1000).toLocaleDateString('zh-TW');
-                    stockMap[dateStr] = stockData.c[i];
-                }
-            }
+    // 🌟 關鍵修改：優先從 stockData.info 取用動態的發行股數與持倉量！
+    const dynamicShares = stockData.info?.sharesOutstanding || staticProfile.shares;
+    const dynamicBtcHoldings = stockData.info?.btcHoldings || staticProfile.btcHoldings;
 
-            let lastKnownStockPrice = (stockData && stockData.c && stockData.c.length > 0) ? stockData.c[0] : 0; 
+    console.log(`目前計算基準 - 股數: ${dynamicShares}, BTC持倉: ${dynamicBtcHoldings}`);
 
-            rawBtcKlines.forEach(kline => {
-                const dateObj = new Date(kline[0]);
-                const dateDisplay = dateObj.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
-                const dateKey = dateObj.toLocaleDateString('zh-TW');
-                
-                const btcClosePrice = parseFloat(kline[4]);
-                dates.push(dateDisplay);
-                btcPrices.push(btcClosePrice);
-
-                const mnavBillion = (btcClosePrice * profile.btcHoldings) / 1000000000;
-                mnavs.push(mnavBillion.toFixed(2));
-
-                if (stockMap[dateKey]) {
-                    lastKnownStockPrice = stockMap[dateKey];
-                }
-                
-                const actualStockPrice = lastKnownStockPrice || ((btcClosePrice * profile.btcHoldings) / profile.shares);
-                stockPrices.push(actualStockPrice.toFixed(2));
-
-                const navPerShare = (btcClosePrice * profile.btcHoldings) / profile.shares;
-                const premium = (actualStockPrice / navPerShare) - 1;
-                premiums.push((premium * 100).toFixed(2));
-
-                const discount = 1 - (actualStockPrice / navPerShare);
-                discounts.push((discount * 100).toFixed(2));
-            });
-
-            masterData = { dates, btcPrices, stockPrices, premiums, discounts, mnavs };
-            updateStatCards();
-            applyFiltersAndRender();
+    const stockMap = {};
+    if (stockData && stockData.s === "ok") {
+        for (let i = 0; i < stockData.t.length; i++) {
+            const dateStr = new Date(stockData.t[i] * 1000).toLocaleDateString('zh-TW');
+            stockMap[dateStr] = stockData.c[i];
         }
+    }
+
+    let lastKnownStockPrice = (stockData && stockData.c && stockData.c.length > 0) ? stockData.c[0] : 0; 
+
+    rawBtcKlines.forEach(kline => {
+        const dateObj = new Date(kline[0]);
+        const dateDisplay = dateObj.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+        const dateKey = dateObj.toLocaleDateString('zh-TW');
+        
+        const btcClosePrice = parseFloat(kline[4]);
+        dates.push(dateDisplay);
+        btcPrices.push(btcClosePrice);
+
+        // 使用動態持倉量計算 mNAV
+        const mnavBillion = (btcClosePrice * dynamicBtcHoldings) / 1000000000;
+        mnavs.push(mnavBillion.toFixed(2));
+
+        if (stockMap[dateKey]) {
+            lastKnownStockPrice = stockMap[dateKey];
+        }
+        
+        // 使用動態持倉量和股數計算 NAV Per Share 和折溢價
+        const actualStockPrice = lastKnownStockPrice || ((btcClosePrice * dynamicBtcHoldings) / dynamicShares);
+        stockPrices.push(actualStockPrice.toFixed(2));
+
+        const navPerShare = (btcClosePrice * dynamicBtcHoldings) / dynamicShares;
+        const premium = (actualStockPrice / navPerShare) - 1;
+        premiums.push((premium * 100).toFixed(2));
+
+        const discount = 1 - (actualStockPrice / navPerShare);
+        discounts.push((discount * 100).toFixed(2));
+    });
+
+    masterData = { dates, btcPrices, stockPrices, premiums, discounts, mnavs };
+    updateStatCards();
+    applyFiltersAndRender();
+}
 
         function updateStatCards() {
             const latestIndex = masterData.btcPrices.length - 1;
