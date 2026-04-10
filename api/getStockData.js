@@ -4,34 +4,35 @@ export default async function handler(req, res) {
   }
 
   const { symbol, from, to } = req.body;
-  const apiKey = process.env.FINNHUB_API_KEY;
-
-  if (!apiKey) {
-    console.error("錯誤：找不到 FINNHUB_API_KEY 環境變數");
-    return res.status(500).json({ error: '伺服器環境變數配置錯誤' });
-  }
 
   try {
-    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${to}&token=${apiKey}`;
+    // Yahoo Finance 的歷史數據介面 (不需要 API Key)
+    // 注意：Yahoo 使用 interval (1d) 而非 resolution
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${from}&period2=${to}&interval=1d`;
+    
     const response = await fetch(url);
-    const data = await response.json();
+    const result = await response.json();
 
-    // 檢查 Finnhub 的回應狀態
-    if (!response.ok) {
-      console.error("Finnhub 回傳錯誤碼:", response.status, data);
+    if (!response.ok || !result.chart.result) {
       return res.status(response.status).json({ 
-        error: `Finnhub API 錯誤: ${data.error || '未知錯誤'}`,
-        details: data
+        error: "Yahoo Finance 抓取失敗", 
+        details: result.chart?.error || "未知錯誤" 
       });
     }
 
-    if (data.s === "no_data") {
-      return res.status(404).json({ error: '該時段內無股價資料' });
-    }
+    const chart = result.chart.result[0];
+    
+    // 轉換格式以相容你原本的 Finnhub 前端邏輯
+    // Finnhub 格式是 { s: "ok", t: [], c: [] }
+    const formattedData = {
+      s: "ok",
+      t: chart.timestamp,
+      c: chart.indicators.quote[0].close
+    };
 
-    return res.status(200).json(data);
+    return res.status(200).json(formattedData);
   } catch (err) {
-    console.error("API 處理發生例外:", err);
+    console.error("Yahoo API 處理發生例外:", err);
     return res.status(500).json({ error: '後端執行失敗', message: err.message });
   }
 }
