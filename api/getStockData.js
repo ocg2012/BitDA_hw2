@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   const { symbol, from, to } = req.body;
   
   // 🔑 請將這裡換成你的 Finnhub API Key (建議後續改放進 Vercel Environment Variables)
-  const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || '在此填入你的_FINNHUB_API_KEY';
+  const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || 'd7cdhu9r01qgsect309gd7cdhu9r01qgsect30a0';
 
   try {
     // 1. 抓取 Finnhub 歷史股價 (K線資料)
