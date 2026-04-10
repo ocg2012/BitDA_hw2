@@ -8,16 +8,17 @@ export default async function handler(req, res) {
 
     const { prompt } = req.body;
 
-    // 從 Vercel 的環境變數中讀取 API Key
-    const apiKey = process.env.GEMINI_API_KEY;
+    // 從 Vercel 的環境變數中讀取 API Key，並使用 trim() 自動消除可能不小心複製到的空白鍵
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
     if (!apiKey) {
-        return res.status(500).json({ error: '伺服器未配置 GEMINI_API_KEY 環境變數' });
+        return res.status(500).json({ error: '伺服器未配置 GEMINI_API_KEY 環境變數，請至 Vercel 後台設定。' });
     }
 
     try {
-        // 🌟 修改這裡：換成帶有 -latest 後綴的穩定模型名稱
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+        // 🌟 退回使用最穩定、所有帳號絕對都有權限的標準版模型 gemini-1.5-flash
+        // 如果這個還不行，可以把 1.5-flash 改成 1.0-pro 試試看
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
 
         const data = await response.json();
         
+        // 將 Google 算好的結果傳回給前端
         res.status(200).json(data);
 
     } catch (error) {
