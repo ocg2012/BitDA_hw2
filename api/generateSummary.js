@@ -8,24 +8,26 @@ export default async function handler(req, res) {
 
     const { prompt } = req.body;
 
-    // 從 Vercel 的環境變數中讀取 API Key，並使用 trim() 自動消除可能不小心複製到的空白鍵
+    // 從 Vercel 的環境變數中讀取 API Key，並自動消除空白鍵
     const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
     if (!apiKey) {
-        return res.status(500).json({ error: '伺服器未配置 GEMINI_API_KEY 環境變數，請至 Vercel 後台設定。' });
+        return res.status(500).json({ error: '伺服器未配置 GEMINI_API_KEY 環境變數。' });
     }
 
     try {
-        // 🌟 退回使用最穩定、所有帳號絕對都有權限的標準版模型 gemini-1.5-flash
-        // 如果這個還不行，可以把 1.5-flash 改成 1.0-pro 試試看
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // 🌟 終極退路：使用最基礎的 gemini-pro (1.0) 模型，這個模型 100% 所有帳號都能用
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
         
+        // 將系統設定合併到 prompt 裡面，因為 gemini-pro 不支援 systemInstruction 參數
+        const fullPrompt = "你是一個專業、客觀的加密貨幣與傳統金融市場分析師。\n\n" + prompt;
+
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: "你是一個專業、客觀的加密貨幣與傳統金融市場分析師。" }] }
+                // 只留下最基礎的 contents 結構
+                contents: [{ parts: [{ text: fullPrompt }] }]
             })
         });
 
