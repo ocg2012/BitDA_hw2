@@ -111,7 +111,7 @@
     <script>
         let chartInstance = null;
         
-        // 初始靜態配置 (做為後端 API 抓取失敗時的備用數據 Fallback)
+        // 初始靜態配置 (作為所有 API 失敗時的最後防線)
         const companyProfiles = {
             'MSTR': { btcHoldings: 252220, shares: 202000000, name: 'MicroStrategy' },
             'MARA': { btcHoldings: 26842, shares: 280000000, name: 'Marathon Digital' },
@@ -131,7 +131,7 @@
         async function fetchFinancialData() {
             try {
                 const dynamicText = document.getElementById('dynamicSharesText');
-                dynamicText.innerHTML = "正在向後端請求資料...";
+                dynamicText.innerHTML = "正在向多個節點請求動態資料...";
                 let isHoldingsDynamic = false;
                 let isSharesDynamic = false;
 
@@ -140,11 +140,39 @@
                 if (!btcRes.ok) throw new Error('無法獲取比特幣價格資料');
                 rawBtcKlines = await btcRes.json();
 
-                // 2. 時間戳計算
+                // 2. 🔥 替代方案 A: 前端直接抓取 CoinGecko 持倉 (支援 CORS，避開 Vercel IP 限制)
+                try {
+                    const cgRes = await fetch('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
+                    if (cgRes.ok) {
+                        const cgData = await cgRes.json();
+                        const treasury = cgData.companies.find(c => c.symbol.toLowerCase() === currentCompany.toLowerCase());
+                        if (treasury && treasury.total_holdings) {
+                            companyProfiles[currentCompany].btcHoldings = treasury.total_holdings;
+                            isHoldingsDynamic = true;
+                            console.log(`[前端直抓] ${currentCompany} 持倉成功:`, treasury.total_holdings);
+                        }
+                    }
+                } catch (e) { console.warn("前端 CoinGecko 抓取失敗", e); }
+
+                // 3. 🔥 替代方案 B: 透過公共 CORS Proxy 抓取 Yahoo 股數 (避開 Vercel IP 限制)
+                try {
+                    const targetUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentCompany}`);
+                    const proxyUrl = `https://corsproxy.io/?${targetUrl}`;
+                    const yhRes = await fetch(proxyUrl);
+                    if (yhRes.ok) {
+                        const yhData = await yhRes.json();
+                        const shares = yhData.quoteResponse?.result?.[0]?.sharesOutstanding;
+                        if (shares) {
+                            companyProfiles[currentCompany].shares = shares;
+                            isSharesDynamic = true;
+                            console.log(`[前端代理] ${currentCompany} 股數成功:`, shares);
+                        }
+                    }
+                } catch (e) { console.warn("前端 Yahoo 代理抓取失敗", e); }
+
+                // 4. 呼叫你的 Vercel 後端抓取歷史股價 (如果剛剛前端失敗了，這裡可以當備案)
                 const fromTime = Math.floor(rawBtcKlines[0][0] / 1000) - (86400 * 5); 
                 const toTime = Math.floor(Date.now() / 1000);
-
-                // 3. 呼叫你的 Vercel 後端
                 const stockRes = await fetch('/api/getStockData', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -153,33 +181,29 @@
                 
                 if (!stockRes.ok) throw new Error(`API 請求失敗: ${stockRes.status}`);
                 const stockData = await stockRes.json();
-                console.log("來自後端的資料:", stockData); // 供開發者模式查看
 
-                // 4. 解析後端傳來的動態資料 (加入除錯提示)
+                // 如果前端沒抓到，且後端有傳 info，則以後端為主 (雙重保險)
                 if (stockData.info) {
-                    if (stockData.info.sharesOutstanding) {
+                    if (!isSharesDynamic && stockData.info.sharesOutstanding) {
                         companyProfiles[currentCompany].shares = stockData.info.sharesOutstanding;
                         isSharesDynamic = true;
+                        console.log(`[後端備案] 股數成功`);
                     }
-                    if (stockData.info.btcHoldings) {
+                    if (!isHoldingsDynamic && stockData.info.btcHoldings) {
                         companyProfiles[currentCompany].btcHoldings = stockData.info.btcHoldings;
                         isHoldingsDynamic = true;
+                        console.log(`[後端備案] 持倉成功`);
                     }
                 }
 
                 // 5. 更新 UI 顯示狀態
-                if (!stockData.info) {
-                    // 如果後端連 info 物件都沒有，代表後端還是舊程式碼
-                    dynamicText.innerHTML = `<span class="text-red-500 font-bold">警告：後端未回傳動態資料，請確認 getStockData.js 已更新並 Redeploy！</span>`;
-                } else {
-                    const sharesVal = (companyProfiles[currentCompany].shares / 1000000).toFixed(2) + 'M';
-                    const holdingsVal = companyProfiles[currentCompany].btcHoldings.toLocaleString();
-                    
-                    const sharesHTML = isSharesDynamic ? `<span class="text-emerald-600 font-bold">${sharesVal} (即時)</span>` : `<span class="text-amber-500">${sharesVal} (後端抓取失敗)</span>`;
-                    const holdingsHTML = isHoldingsDynamic ? `<span class="text-emerald-600 font-bold">${holdingsVal} BTC (即時)</span>` : `<span class="text-amber-500">${holdingsVal} BTC (後端抓取失敗)</span>`;
-                    
-                    dynamicText.innerHTML = `計算參數: 股數 ${sharesHTML} | 持倉 ${holdingsHTML}`;
-                }
+                const sharesVal = (companyProfiles[currentCompany].shares / 1000000).toFixed(2) + 'M';
+                const holdingsVal = companyProfiles[currentCompany].btcHoldings.toLocaleString();
+                
+                const sharesHTML = isSharesDynamic ? `<span class="text-emerald-600 font-bold">${sharesVal} (即時)</span>` : `<span class="text-amber-500">${sharesVal} (靜態預設)</span>`;
+                const holdingsHTML = isHoldingsDynamic ? `<span class="text-emerald-600 font-bold">${holdingsVal} BTC (即時)</span>` : `<span class="text-amber-500">${holdingsVal} BTC (靜態預設)</span>`;
+                
+                dynamicText.innerHTML = `計算參數: 股數 ${sharesHTML} | 持倉 ${holdingsHTML}`;
 
                 // 6. 處理圖表資料
                 processCompanyData(stockData);
