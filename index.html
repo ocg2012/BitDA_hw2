@@ -3,370 +3,396 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DAT.co Monitor | MSTR Premium to NAV Tracker</title>
+    <title>DAT.co 財務指標分析儀表板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-    </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
-
-    <!-- Loading Overlay -->
-    <div id="loading" class="fixed inset-0 flex flex-col items-center justify-center bg-slate-900 bg-opacity-80 z-50 transition-opacity duration-300">
-        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
-        <h2 class="text-white text-xl font-semibold">正在抓取即時市場數據...</h2>
-        <p class="text-slate-300 text-sm mt-2">Connecting to CoinGecko & Yahoo Finance APIs</p>
-    </div>
-
-    <!-- Navigation -->
-    <nav class="bg-indigo-600 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-2">
-                <i class="fa-brands fa-bitcoin text-2xl text-yellow-400"></i>
-                <span class="font-bold text-xl tracking-wider">DAT.co Monitor</span>
+<body class="bg-slate-50 min-h-screen font-sans">
+    
+    <nav class="bg-slate-900 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                    <span class="font-bold text-xl tracking-wider">DAT.co Analytics</span>
+                </div>
             </div>
-            <div class="text-sm font-medium opacity-80">MicroStrategy (MSTR) Indicator</div>
         </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <!-- Header Info -->
-        <div>
-            <h1 class="text-3xl font-extrabold text-slate-900">MSTR Premium to NAV</h1>
-            <p class="text-slate-500 mt-2">
-                監控 MicroStrategy (MSTR) 股票相對於其底層比特幣淨資產價值 (NAV) 的溢價狀況。
-                <br>
-                <span class="text-xs text-slate-400" id="info-subtitle">* 正在載入即時流通股數與比特幣持有量...</span>
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">DAT.co 財務指標分析儀表板</h1>
+            <p class="text-slate-500 max-w-3xl">
+                此儀表板同步串接 Binance (BTC) 與 Finnhub (美股) 真實歷史資料，為您提供最準確的資產淨值折溢價分析。
             </p>
+        </header>
+
+        <!-- 數據卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div class="text-sm font-medium text-slate-500 mb-1">最新 BTC 價格 (USD)</div>
+                <div id="btcPriceCard" class="text-3xl font-bold text-slate-800">載入中...</div>
+                <div class="text-xs text-slate-400 mt-2">資料來源: Binance API</div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div id="stockCardTitle" class="text-sm font-medium text-slate-500 mb-1">真實 MSTR 股價 (USD)</div>
+                <div id="stockPriceCard" class="text-3xl font-bold text-slate-800">載入中...</div>
+                <div class="text-xs text-slate-400 mt-2">資料來源: Finnhub API</div>
+            </div>
+            <div class="bg-blue-50 rounded-xl shadow-sm border border-blue-100 p-6 relative overflow-hidden">
+                <div class="text-sm font-medium text-blue-600 mb-1">當前 Premium to NAV</div>
+                <div id="premiumCard" class="text-4xl font-black text-blue-700">載入中...</div>
+                <div class="text-xs text-blue-500 mt-2">基於即時市值與持倉計算</div>
+            </div>
         </div>
 
-        <!-- KPI Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div class="glass-card rounded-xl p-6">
-                <div class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-1">MSTR 即時股價</div>
-                <div class="text-3xl font-bold text-slate-800" id="mstr-price">$--</div>
-                <div class="text-xs text-slate-400 mt-2">Yahoo Finance API</div>
+        <!-- 視覺化圖表區 -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4 space-y-3 lg:space-y-0">
+                <h2 class="text-lg font-semibold text-slate-800">指標時間序列趨勢圖</h2>
+                
+                <div class="flex flex-wrap items-center gap-3">
+                    <select id="companySelect" onchange="switchCompany(this.value)" class="bg-slate-800 border border-slate-700 text-white py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium transition-colors cursor-pointer">
+                        <option value="MSTR">MicroStrategy (MSTR)</option>
+                        <option value="MARA">Marathon Digital (MARA)</option>
+                        <option value="RIOT">Riot Platforms (RIOT)</option>
+                    </select>
+
+                    <label class="flex items-center space-x-2 cursor-pointer bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">
+                        <input type="checkbox" id="compareBtcToggle" onchange="toggleBtcCompare()" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4">
+                        <span class="text-sm font-medium text-slate-700">疊加 BTC 走勢對比</span>
+                    </label>
+
+                    <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                        <button id="btn-7d" onclick="changeDays(7)" class="px-3 py-1 text-xs font-medium rounded-md text-slate-500 hover:text-slate-800 transition">7 天</button>
+                        <button id="btn-30d" onclick="changeDays(30)" class="px-3 py-1 text-xs font-medium rounded-md bg-white text-blue-600 shadow-sm transition">30 天</button>
+                        <button id="btn-90d" onclick="changeDays(90)" class="px-3 py-1 text-xs font-medium rounded-md text-slate-500 hover:text-slate-800 transition">90 天</button>
+                    </div>
+
+                    <select id="indicatorSelect" onchange="switchIndicator(this.value)" class="bg-slate-50 border border-slate-300 text-slate-700 py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium transition-colors cursor-pointer">
+                        <option value="premium">Premium to NAV (溢價百分比)</option>
+                        <option value="discount">Discount to NAV (折價百分比)</option>
+                        <option value="mnav">mNAV (比特幣持倉總價值)</option>
+                        <option value="stock">真實股價 (USD)</option>
+                    </select>
+                </div>
             </div>
-            <div class="glass-card rounded-xl p-6">
-                <div class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-1">BTC 即時價格</div>
-                <div class="text-3xl font-bold text-slate-800" id="btc-price">$--</div>
-                <div class="text-xs text-slate-400 mt-2">CoinGecko API</div>
+            
+            <div class="relative h-80 w-full">
+                <canvas id="mainChart"></canvas>
             </div>
-            <div class="glass-card rounded-xl p-6">
-                <div class="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-1">MSTR 持有比特幣數量</div>
-                <div class="text-3xl font-bold text-slate-800" id="btc-holdings">--</div>
-                <div class="text-xs text-slate-400 mt-2">CoinGecko Treasury API</div>
+        </div>
+
+        <!-- AI 分析區塊 -->
+        <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-6 text-white">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center space-x-2">
+                    <span class="bg-blue-500 p-1.5 rounded-md">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </span>
+                    <h2 class="text-xl font-semibold">Gemini AI 財報洞察</h2>
+                </div>
+                <button onclick="generateSummary()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition duration-150 ease-in-out flex items-center shadow-md">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    生成最新報告
+                </button>
             </div>
-            <div class="glass-card rounded-xl p-6 border-l-4 border-indigo-500">
-                <div class="text-indigo-600 text-sm font-semibold uppercase tracking-wider mb-1">Premium to NAV (溢價)</div>
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+            
+            <div id="aiSummaryContent" class="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 bg-slate-800 rounded-lg border border-slate-700 min-h-[100px]">
+                點擊右上方按鈕，AI 將為您即時解讀當前選擇指標的市場趨勢...
+            </div>
+            <div id="aiErrorMsg" class="hidden mt-3 text-red-400 text-sm bg-red-900/30 p-3 rounded-lg border border-red-800"></div>
+        </div>
+    </main>
 
     <script>
-        // 動態資料儲存區 (提供預設值作為 API 失敗時的備用)
-        let dynamicData = {
-            sharesOutstanding: 279300000, // 備用流通股數
-            btcHoldings: 766970           // 備用 BTC 持有量
+        let chartInstance = null;
+        
+        const companyProfiles = {
+            'MSTR': { btcHoldings: 766970, shares: 279300000, name: 'MicroStrategy' },
+            'MARA': { btcHoldings: 53822, shares: 320000000, name: 'MARA Holdings' },
+            'RIOT': { btcHoldings: 15680, shares: 310000000, name: 'Riot Platforms' }
         };
         
-        let appData = {
-            chartData: [],
-            latest: {}
-        };
+        let currentCompany = 'MSTR';
+        let rawBtcKlines = []; 
+        let masterData = { dates: [], btcPrices: [], stockPrices: [], premiums: [], discounts: [], mnavs: [] }; 
+        let currentDisplayData = {}; 
 
-        let myChart = null;
+        let currentIndicator = 'premium'; 
+        let currentDays = 30; 
+        let showBtcCompare = false; 
 
-        // 取得公司即時基礎資料 (股數與 BTC 持有量)
-        async function fetchCompanyData() {
+        window.onload = fetchFinancialData;
+
+        async function fetchFinancialData() {
             try {
-                // 1. 從 CoinGecko 取得上市公司的 BTC 持有量
-                const cgRes = await fetch('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
-                if (cgRes.ok) {
-                    const cgJson = await cgRes.json();
-                    const mstrData = cgJson.companies.find(c => c.symbol.toLowerCase() === 'mstr');
-                    if (mstrData && mstrData.total_holdings) {
-                        dynamicData.btcHoldings = mstrData.total_holdings;
-                    }
-                }
-            } catch (error) {
-                console.warn("無法取得即時 BTC 持有量，將使用備用數據", error);
-            }
+                // 1. 抓取 Binance BTC 資料
+                const btcRes = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=90');
+                if (!btcRes.ok) throw new Error('無法獲取比特幣價格資料');
+                rawBtcKlines = await btcRes.json();
 
-            try {
-                // 2. 從 Yahoo Finance 取得即時流通股數 (sharesOutstanding)
-                const yfUrl = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=MSTR';
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(yfUrl)}`;
-                const yfRes = await fetch(proxyUrl);
-                if (yfRes.ok) {
-                    const yfJson = await yfRes.json();
-                    const shares = yfJson.quoteResponse?.result?.[0]?.sharesOutstanding;
-                    if (shares) {
-                        dynamicData.sharesOutstanding = shares;
-                    }
+                // 2. 時間戳計算
+                const fromTime = Math.floor(rawBtcKlines[0][0] / 1000) - (86400 * 5); 
+                const toTime = Math.floor(rawBtcKlines[rawBtcKlines.length - 1][0] / 1000) + 86400;
+
+                // 3. 獲取股價資料
+                // 直接使用相對路徑，這在 Vercel 生產環境中是最穩定的做法
+                const stockRes = await fetch('/api/getStockData', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: currentCompany, from: fromTime, to: toTime })
+                });
+                
+                if (!stockRes.ok) {
+                    const errorText = await stockRes.text();
+                    console.error("API Error Response:", errorText);
+                    throw new Error(`API 請求失敗 (狀態碼: ${stockRes.status})`);
                 }
+
+                const stockData = await stockRes.json();
+                processCompanyData(stockData);
+
             } catch (error) {
-                console.warn("無法取得即時流通股數，將使用備用數據", error);
+                console.error("獲取資料失敗:", error);
+                document.getElementById('premiumCard').innerText = "API 錯誤";
+                // 顯示一個提示給使用者
+                const aiErrorMsg = document.getElementById('aiErrorMsg');
+                aiErrorMsg.innerText = `資料獲取失敗：${error.message}。請確認 Vercel 後端 API 已部署且環境變數設定正確。`;
+                aiErrorMsg.classList.remove('hidden');
             }
         }
 
-        // 初始化主程式
-        async function initApp() {
-            try {
-                // 先取得公司動態資料
-                await fetchCompanyData();
+        function processCompanyData(stockData) {
+            const dates = [], btcPrices = [], premiums = [], discounts = [], stockPrices = [], mnavs = [];
+            const profile = companyProfiles[currentCompany];
 
-                const data = await fetchMarketData();
-                appData.chartData = data;
-                appData.latest = data[data.length - 1];
-
-                updateUI();
-                renderChart();
-            } catch (error) {
-                console.error("Data fetching failed:", error);
-                alert("無法取得即時資料，將載入模擬資料以供展示 (API 可能受到 CORS 或 Rate Limit 限制)。");
-                const mockData = generateMockData();
-                appData.chartData = mockData;
-                appData.latest = mockData[mockData.length - 1];
-                updateUI();
-                renderChart();
-            } finally {
-                // 隱藏 Loading
-                document.getElementById('loading').style.opacity = '0';
-                setTimeout(() => document.getElementById('loading').style.display = 'none', 300);
+            const stockMap = {};
+            if (stockData && stockData.s === "ok") {
+                for (let i = 0; i < stockData.t.length; i++) {
+                    const dateStr = new Date(stockData.t[i] * 1000).toLocaleDateString('zh-TW');
+                    stockMap[dateStr] = stockData.c[i];
+                }
             }
-        }
 
-        // 取得市場資料
-        async function fetchMarketData() {
-            // 1. 取得 BTC 30天歷史價格 (CoinGecko)
-            const btcRes = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=30&interval=daily');
-            if (!btcRes.ok) throw new Error("CoinGecko API failed");
-            const btcJson = await btcRes.json();
-            const btcPrices = {};
-            btcJson.prices.forEach(p => {
-                const date = new Date(p[0]).toISOString().split('T')[0];
-                btcPrices[date] = p[1];
+            let lastKnownStockPrice = (stockData && stockData.c && stockData.c.length > 0) ? stockData.c[0] : 0; 
+
+            rawBtcKlines.forEach(kline => {
+                const dateObj = new Date(kline[0]);
+                const dateDisplay = dateObj.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+                const dateKey = dateObj.toLocaleDateString('zh-TW');
+                
+                const btcClosePrice = parseFloat(kline[4]);
+                dates.push(dateDisplay);
+                btcPrices.push(btcClosePrice);
+
+                const mnavBillion = (btcClosePrice * profile.btcHoldings) / 1000000000;
+                mnavs.push(mnavBillion.toFixed(2));
+
+                if (stockMap[dateKey]) {
+                    lastKnownStockPrice = stockMap[dateKey];
+                }
+                
+                const actualStockPrice = lastKnownStockPrice || ((btcClosePrice * profile.btcHoldings) / profile.shares);
+                stockPrices.push(actualStockPrice.toFixed(2));
+
+                const navPerShare = (btcClosePrice * profile.btcHoldings) / profile.shares;
+                const premium = (actualStockPrice / navPerShare) - 1;
+                premiums.push((premium * 100).toFixed(2));
+
+                const discount = 1 - (actualStockPrice / navPerShare);
+                discounts.push((discount * 100).toFixed(2));
             });
 
-            // 2. 取得 MSTR 30天歷史股價 (Yahoo Finance via AllOrigins Proxy)
-            const mstrUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/MSTR?interval=1d&range=1mo';
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(mstrUrl)}`;
-            const mstrRes = await fetch(proxyUrl);
-            if (!mstrRes.ok) throw new Error("Yahoo Finance proxy failed");
-            const mstrJson = await mstrRes.json();
-            
-            const result = mstrJson.chart.result[0];
-            const timestamps = result.timestamp;
-            const closePrices = result.indicators.quote[0].close;
-
-            let combinedData = [];
-            const btcPerShare = dynamicData.btcHoldings / dynamicData.sharesOutstanding;
-
-            timestamps.forEach((ts, idx) => {
-                const stockPrice = closePrices[idx];
-                if (stockPrice !== null) {
-                    const dateObj = new Date(ts * 1000);
-                    const dateStr = dateObj.toISOString().split('T')[0];
-                    
-                    // 嘗試抓取當天的 BTC 價格，若無則抓取最接近的最新價格
-                    const btcPrice = btcPrices[dateStr] || Object.values(btcPrices).pop();
-                    
-                    // 計算 NAV (每股淨資產)
-                    const navPerShare = btcPrice * btcPerShare;
-                    
-                    // 計算 Premium to NAV = (股價 - NAV) / NAV * 100
-                    const premium = ((stockPrice - navPerShare) / navPerShare) * 100;
-
-                    combinedData.push({
-                        date: dateStr,
-                        mstrPrice: stockPrice,
-                        btcPrice: btcPrice,
-                        nav: navPerShare,
-                        premium: premium
-                    });
-                }
-            });
-
-            return combinedData;
+            masterData = { dates, btcPrices, stockPrices, premiums, discounts, mnavs };
+            updateStatCards();
+            applyFiltersAndRender();
         }
 
-        // 當 API 失敗時的備用模擬數據
-        function generateMockData() {
-            const data = [];
-            let currentBTC = 68000;
-            let currentMSTR = 130;
-            const btcPerShare = dynamicData.btcHoldings / dynamicData.sharesOutstanding;
-            
-            for(let i=30; i>=0; i--) {
-                let d = new Date();
-                d.setDate(d.getDate() - i);
-                
-                // 添加隨機波動
-                currentBTC = currentBTC * (1 + (Math.random() - 0.5) * 0.04);
-                currentMSTR = currentMSTR * (1 + (Math.random() - 0.5) * 0.06);
-                
-                const nav = currentBTC * btcPerShare;
-                const premium = ((currentMSTR - nav) / nav) * 100;
+        function updateStatCards() {
+            const latestIndex = masterData.btcPrices.length - 1;
+            if (latestIndex < 0) return;
+            document.getElementById('btcPriceCard').innerText = `$${masterData.btcPrices[latestIndex].toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('stockPriceCard').innerText = `$${parseFloat(masterData.stockPrices[latestIndex]).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('premiumCard').innerText = `${masterData.premiums[latestIndex]}%`;
+        }
 
-                data.push({
-                    date: d.toISOString().split('T')[0],
-                    mstrPrice: currentMSTR,
-                    btcPrice: currentBTC,
-                    nav: nav,
-                    premium: premium
+        function switchCompany(companyKey) {
+            currentCompany = companyKey;
+            document.getElementById('stockCardTitle').innerText = `真實 ${companyKey} 股價 (USD)`;
+            fetchFinancialData();
+        }
+
+        function switchIndicator(indicatorType) {
+            currentIndicator = indicatorType;
+            applyFiltersAndRender();
+        }
+
+        function changeDays(days) {
+            currentDays = days;
+            [7, 30, 90].forEach(d => {
+                const btn = document.getElementById(`btn-${d}d`);
+                btn.className = d === days 
+                    ? "px-3 py-1 text-xs font-medium rounded-md bg-white text-blue-600 shadow-sm transition"
+                    : "px-3 py-1 text-xs font-medium rounded-md text-slate-500 hover:text-slate-800 transition";
+            });
+            applyFiltersAndRender();
+        }
+
+        function toggleBtcCompare() {
+            showBtcCompare = document.getElementById('compareBtcToggle').checked;
+            applyFiltersAndRender();
+        }
+
+        function applyFiltersAndRender() {
+            if (!masterData.dates.length) return;
+            currentDisplayData = {
+                dates: masterData.dates.slice(-currentDays),
+                btcPrices: masterData.btcPrices.slice(-currentDays),
+                stockPrices: masterData.stockPrices.slice(-currentDays),
+                premiums: masterData.premiums.slice(-currentDays),
+                discounts: masterData.discounts.slice(-currentDays),
+                mnavs: masterData.mnavs.slice(-currentDays)
+            };
+
+            let data, label, unit, colorArray;
+            switch(currentIndicator) {
+                case 'premium': data = currentDisplayData.premiums; label = 'Premium to NAV'; unit = '%'; colorArray = [59, 130, 246]; break;
+                case 'discount': data = currentDisplayData.discounts; label = 'Discount to NAV'; unit = '%'; colorArray = [239, 68, 68]; break;
+                case 'mnav': data = currentDisplayData.mnavs; label = 'mNAV'; unit = 'B'; colorArray = [16, 185, 129]; break;
+                case 'stock': data = currentDisplayData.stockPrices; label = `真實股價`; unit = '$'; colorArray = [139, 92, 246]; break;
+            }
+
+            renderChart(currentDisplayData.dates, data, label, unit, colorArray, currentDisplayData.btcPrices);
+        }
+
+        function renderChart(labels, mainData, labelName, unit, rgbColor, btcData) {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, `rgba(${rgbColor[0]}, ${rgbColor[1]}, ${rgbColor[2]}, 0.2)`);
+            gradient.addColorStop(1, `rgba(${rgbColor[0]}, ${rgbColor[1]}, ${rgbColor[2]}, 0)`);
+
+            const datasets = [{
+                label: labelName,
+                data: mainData,
+                borderColor: `rgb(${rgbColor[0]}, ${rgbColor[1]}, ${rgbColor[2]})`,
+                backgroundColor: gradient,
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                fill: true,
+                tension: 0.4,
+                yAxisID: 'y'
+            }];
+
+            if (showBtcCompare) {
+                datasets.push({
+                    label: 'BTC 價格 (USD)',
+                    data: btcData,
+                    borderColor: 'rgb(245, 158, 11)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    fill: false,
+                    tension: 0.4,
+                    yAxisID: 'y1'
                 });
             }
-            return data;
-        }
 
-        // 更新卡片 UI
-        function updateUI() {
-            // 更新副標題顯示實際抓取到的股數與BTC數量
-            const infoSubtitle = document.getElementById('info-subtitle');
-            if(infoSubtitle) {
-                infoSubtitle.innerText = `* 即時數據參數: 持有量 ${dynamicData.btcHoldings.toLocaleString()} BTC | 流通股數 ${(dynamicData.sharesOutstanding / 1000000).toFixed(2)}M 股`;
-            }
-
-            document.getElementById('mstr-price').innerText = `$${appData.latest.mstrPrice.toFixed(2)}`;
-            document.getElementById('btc-price').innerText = `$${appData.latest.btcPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('btc-holdings').innerText = Math.round(dynamicData.btcHoldings).toLocaleString();
-            
-            const premiumEl = document.getElementById('current-premium');
-            premiumEl.innerText = `${appData.latest.premium.toFixed(2)}%`;
-            if (appData.latest.premium > 0) {
-                premiumEl.className = "text-3xl font-bold text-green-600";
-            } else {
-                premiumEl.className = "text-3xl font-bold text-red-500";
-            }
-        }
-
-        // 渲染 Chart.js 圖表
-        function renderChart() {
-            const ctx = document.getElementById('navChart').getContext('2d');
-            
-            const labels = appData.chartData.map(d => d.date);
-            const premiumData = appData.chartData.map(d => d.premium);
-
-            if (myChart) myChart.destroy();
-
-            myChart = new Chart(ctx, {
+            chartInstance = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Premium to NAV (%)',
-                        data: premiumData,
-                        borderColor: 'rgb(79, 70, 229)',
-                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointBackgroundColor: 'rgb(79, 70, 229)',
-                        fill: true,
-                        tension: 0.3
-                    }]
-                },
+                data: { labels: labels, datasets: datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { display: false },
+                        legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6, padding: 20 } },
                         tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
                             callbacks: {
                                 label: function(context) {
-                                    return ' 溢價率: ' + context.parsed.y.toFixed(2) + '%';
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.datasetIndex === 0) {
+                                        return label + (unit === '$' ? '$' : '') + context.parsed.y + (unit === '%' ? '%' : (unit === 'B' ? 'B' : ''));
+                                    } else {
+                                        return label + '$' + context.parsed.y.toLocaleString();
+                                    }
                                 }
                             }
                         }
                     },
                     scales: {
-                        y: {
-                            title: { display: true, text: 'Premium (%)' },
-                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
+                        y: { 
+                            type: 'linear', display: true, position: 'left',
+                            ticks: { callback: function(value) { return unit === '$' ? '$' + value : value + (unit === '%' ? '%' : ''); } }
                         },
-                        x: {
-                            grid: { display: false }
+                        y1: {
+                            type: 'linear', display: showBtcCompare, position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { callback: function(value) { return '$' + value.toLocaleString(); } }
                         }
                     }
                 }
             });
         }
 
-        // 呼叫 Gemini API 產生摘要
-        async function generateAISummary() {
-            const apiKey = document.getElementById('gemini-key').value.trim();
-            const outputEl = document.getElementById('ai-output');
-            const btn = document.getElementById('ai-btn');
-
-            if (!apiKey) {
-                alert('請先輸入有效的 Gemini API Key');
-                return;
-            }
-
-            // 計算過去30天統計資訊供 AI 參考
-            const premiums = appData.chartData.map(d => d.premium);
-            const maxPremium = Math.max(...premiums);
-            const minPremium = Math.min(...premiums);
-
-            const prompt = `
-作為一名金融數據分析師，請根據以下 MicroStrategy (MSTR) 的最新數據與過去30天的指標趨勢，提供一段專業的分析總結（約200字，請用繁體中文，格式清晰）：
-
-- 公司：MicroStrategy (MSTR) - Digital Asset Treasury
-- 當前比特幣持有量：${dynamicData.btcHoldings.toLocaleString()} BTC
-- 當前流通股數：${(dynamicData.sharesOutstanding / 1000000).toFixed(2)} 百萬股
-- 當前 MSTR 股價：$${appData.latest.mstrPrice.toFixed(2)}
-- 當前 BTC 價格：$${appData.latest.btcPrice.toFixed(2)}
-- 當前 MSTR 每股 NAV（淨資產價值）：$${appData.latest.nav.toFixed(2)}
-- 當前 Premium to NAV (溢價)：${appData.latest.premium.toFixed(2)}%
-- 過去 30 天最高溢價：${maxPremium.toFixed(2)}%
-- 過去 30 天最低溢價：${minPremium.toFixed(2)}%
-
-請具體解釋：
-1. 目前這個溢價百分比的意義（代表市場對該公司的估值態度如何）。
-2. 總結這30天以來的趨勢走向，並給出您客觀的市場情緒判斷。
-`;
-
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 分析中...';
-            outputEl.innerHTML = '<div class="text-indigo-600 font-medium animate-pulse">Gemini 正在讀取數據並撰寫分析報告...</div>';
+        async function generateSummary() {
+            const contentDiv = document.getElementById('aiSummaryContent');
+            const errorDiv = document.getElementById('aiErrorMsg');
+            contentDiv.innerHTML = '<div class="flex items-center"><svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> AI 正在同步讀取即時市場數據並編寫報告...</div>';
+            errorDiv.classList.add('hidden');
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }]
-                    })
-                });
-
-                const data = await response.json();
-                if (data.error) {
-                    throw new Error(data.error.message);
+                let currentData, indicatorName, unitLabel;
+                switch(currentIndicator) {
+                    case 'premium': currentData = currentDisplayData.premiums; indicatorName = "Premium to NAV"; unitLabel = "%"; break;
+                    case 'discount': currentData = currentDisplayData.discounts; indicatorName = "Discount to NAV"; unitLabel = "%"; break;
+                    case 'mnav': currentData = currentDisplayData.mnavs; indicatorName = "mNAV"; unitLabel = " 十億美元"; break;
+                    case 'stock': currentData = currentDisplayData.stockPrices; indicatorName = "真實股價"; unitLabel = " USD"; break;
                 }
 
-                const aiText = data.candidates[0].content.parts[0].text;
-                // 將換行符號轉為 HTML 的 <br> 與排版
-                outputEl.innerHTML = `<div class="prose prose-slate max-w-none">${aiText.replace(/\n/g, '<br>')}</div>`;
+                const latestValue = currentData[currentData.length - 1];
+                const avgValue = (currentData.reduce((a, b) => parseFloat(a) + parseFloat(b), 0) / currentDays).toFixed(2);
+                const btcLatest = currentDisplayData.btcPrices[currentDisplayData.btcPrices.length - 1];
+                const companyName = companyProfiles[currentCompany].name;
+                
+                let prompt = `請分析 ${companyName} (${currentCompany}) 近 ${currentDays} 天的「${indicatorName}」財務指標：\n`;
+                prompt += `- 最新真實數值: ${latestValue}${unitLabel}\n- 平均數值: ${avgValue}${unitLabel}\n- 最新比特幣價格: $${btcLatest}\n`;
+                
+                if(showBtcCompare) {
+                    prompt += `使用者目前正在對比此指標與 BTC 價格的走勢。請特別解釋「${indicatorName}」的變化與比特幣價格波動之間的潛在關聯性。\n`;
+                }
+
+                prompt += `請以專業金融分析師的角度，撰寫一段 150 字左右的繁體中文分析。直接輸出分析內容，適當使用 HTML 標籤排版。`;
+
+                const result = await fetch(`/api/generateSummary`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                if (!result.ok) throw new Error(await result.text());
+                const data = await result.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) contentDiv.innerHTML = text;
+                else throw new Error("無法解析 AI 回應格式。");
 
             } catch (error) {
-                console.error("Gemini API Error:", error);
-                outputEl.innerHTML = `<div class="text-red-500 font-medium">生成失敗：${error.message} <br>請確認您的 API Key 是否正確以及具有使用權限。</div>`;
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '生成摘要分析';
+                contentDiv.innerHTML = "分析中斷。";
+                errorDiv.innerText = "錯誤：" + error.message;
+                errorDiv.classList.remove('hidden');
             }
         }
-
-        // 啟動程式
-        window.onload = initApp;
-
     </script>
 </body>
 </html>
