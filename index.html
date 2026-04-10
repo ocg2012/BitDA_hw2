@@ -27,7 +27,7 @@
         <header class="mb-8">
             <h1 class="text-3xl font-bold text-slate-900 mb-2">DAT.co 財務指標分析儀表板</h1>
             <p class="text-slate-500 max-w-3xl">
-                此儀表板同步串接 Binance 與後端金融 API，自動抓取最新<strong>發行股數</strong>與<strong>歷史價格</strong>，計算精確的資產淨值折溢價。
+                此儀表板採純前端架構，同步串接 Binance、CoinGecko 與 Yahoo Finance，自動抓取最新<strong>發行股數</strong>與<strong>歷史價格</strong>，計算精確的資產淨值折溢價。
             </p>
         </header>
 
@@ -140,7 +140,7 @@
                 if (!btcRes.ok) throw new Error('無法獲取比特幣價格資料');
                 rawBtcKlines = await btcRes.json();
 
-                // 2. 🔥 替代方案 A: 前端直接抓取 CoinGecko 持倉 (支援 CORS，避開 Vercel IP 限制)
+                // 2. 🔥 前端直接抓取 CoinGecko 持倉
                 try {
                     const cgRes = await fetch('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
                     if (cgRes.ok) {
@@ -154,7 +154,7 @@
                     }
                 } catch (e) { console.warn("前端 CoinGecko 抓取失敗", e); }
 
-                // 3. 🔥 替代方案 B: 透過公共 CORS Proxy 抓取 Yahoo 股數 (避開 Vercel IP 限制)
+                // 3. 🔥 透過公共 CORS Proxy 抓取 Yahoo 發行股數
                 try {
                     const targetUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentCompany}`);
                     const proxyUrl = `https://corsproxy.io/?${targetUrl}`;
@@ -168,33 +168,30 @@
                             console.log(`[前端代理] ${currentCompany} 股數成功:`, shares);
                         }
                     }
-                } catch (e) { console.warn("前端 Yahoo 代理抓取失敗", e); }
+                } catch (e) { console.warn("前端 Yahoo 股數抓取失敗", e); }
 
-                // 4. 呼叫你的 Vercel 後端抓取歷史股價 (如果剛剛前端失敗了，這裡可以當備案)
+                // 4. 🔥 解決 404 錯誤：拋棄 Vercel 後端，改用前端代理直接抓取 Yahoo 歷史股價！
                 const fromTime = Math.floor(rawBtcKlines[0][0] / 1000) - (86400 * 5); 
                 const toTime = Math.floor(Date.now() / 1000);
-                const stockRes = await fetch('/api/getStockData', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol: currentCompany, from: fromTime, to: toTime })
-                });
+                const chartTargetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${currentCompany}?period1=${fromTime}&period2=${toTime}&interval=1d`;
+                const proxyChartUrl = `https://corsproxy.io/?${encodeURIComponent(chartTargetUrl)}`;
                 
-                if (!stockRes.ok) throw new Error(`API 請求失敗: ${stockRes.status}`);
-                const stockData = await stockRes.json();
-
-                // 如果前端沒抓到，且後端有傳 info，則以後端為主 (雙重保險)
-                if (stockData.info) {
-                    if (!isSharesDynamic && stockData.info.sharesOutstanding) {
-                        companyProfiles[currentCompany].shares = stockData.info.sharesOutstanding;
-                        isSharesDynamic = true;
-                        console.log(`[後端備案] 股數成功`);
-                    }
-                    if (!isHoldingsDynamic && stockData.info.btcHoldings) {
-                        companyProfiles[currentCompany].btcHoldings = stockData.info.btcHoldings;
-                        isHoldingsDynamic = true;
-                        console.log(`[後端備案] 持倉成功`);
-                    }
+                const stockRes = await fetch(proxyChartUrl);
+                if (!stockRes.ok) throw new Error(`Yahoo 歷史股價請求失敗: ${stockRes.status}`);
+                
+                const chartRawData = await stockRes.json();
+                if (!chartRawData.chart || !chartRawData.chart.result) {
+                    throw new Error("Yahoo API 回傳格式錯誤或無資料");
                 }
+                
+                const chart = chartRawData.chart.result[0];
+                
+                // 轉換為兼容舊後端格式的物件，無縫接軌渲染系統
+                const stockData = {
+                    s: "ok",
+                    t: chart.timestamp,
+                    c: chart.indicators.quote[0].close
+                };
 
                 // 5. 更新 UI 顯示狀態
                 const sharesVal = (companyProfiles[currentCompany].shares / 1000000).toFixed(2) + 'M';
@@ -366,6 +363,10 @@
                         body: JSON.stringify({ prompt })
                     });
 
+                    if (res.status === 404) {
+                        throw new Error('找不到後端 AI 服務，請確認 Vercel 已部署 /api/generateSummary 且不在本地端執行。');
+                    }
+
                     if (res.status === 503 && retryCount < maxRetries) {
                         retryCount++;
                         const delay = Math.pow(2, retryCount) * 1000;
@@ -381,7 +382,7 @@
                 } catch (e) {
                     console.error("AI Error:", e);
                     content.innerHTML = "分析失敗。";
-                    errorMsg.innerText = `抱歉，服務遇到連線錯誤。請稍後幾分鐘再按一次按鈕。`;
+                    errorMsg.innerText = `抱歉，服務遇到連線錯誤：${e.message}`;
                     errorMsg.classList.remove('hidden');
                 } finally {
                     btn.disabled = false;
