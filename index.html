@@ -36,7 +36,6 @@
                     </svg>
                     <span class="font-bold text-xl tracking-wider">DAT.co Analytics</span>
                 </div>
-                <div class="text-sm text-slate-300">期末專案 展示版</div>
             </div>
         </div>
     </nav>
@@ -47,7 +46,7 @@
         <header class="mb-8">
             <h1 class="text-3xl font-bold text-slate-900 mb-2">DAT.co 財務指標分析儀表板</h1>
             <p class="text-slate-500 max-w-3xl">
-                此儀表板追蹤 MSTR (MicroStrategy) 相關的財務指標。您可以在下方自由切換觀測「Premium to NAV (資產淨值溢價)」、「mNAV (比特幣持倉總值)」或「估算股價」，以多維度評估公司估值與市場情緒。
+                此儀表板追蹤各大數位資產金庫公司 (如 MSTR, MARA 等) 的財務指標。您可以在下方自由切換觀測不同公司與指標，以多維度評估公司估值與市場情緒。
             </p>
         </header>
 
@@ -59,8 +58,8 @@
                 <div class="text-xs text-slate-400 mt-2">資料來源: Binance API</div>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                <div class="text-sm font-medium text-slate-500 mb-1">估算 MSTR 股價 (USD)</div>
-                <div id="mstrPriceCard" class="text-3xl font-bold text-slate-800">載入中...</div>
+                <div id="stockCardTitle" class="text-sm font-medium text-slate-500 mb-1">估算 MSTR 股價 (USD)</div>
+                <div id="stockPriceCard" class="text-3xl font-bold text-slate-800">載入中...</div>
                 <div class="text-xs text-slate-400 mt-2">模擬傳統金融市場報價</div>
             </div>
             <div class="bg-blue-50 rounded-xl shadow-sm border border-blue-100 p-6 relative overflow-hidden">
@@ -78,6 +77,13 @@
                 <h2 class="text-lg font-semibold text-slate-800">指標時間序列趨勢圖</h2>
                 
                 <div class="flex flex-wrap items-center gap-3">
+                    <!-- 新增：公司選擇器 -->
+                    <select id="companySelect" onchange="switchCompany(this.value)" class="bg-slate-800 border border-slate-700 text-white py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium transition-colors cursor-pointer">
+                        <option value="MSTR">MicroStrategy (MSTR)</option>
+                        <option value="MARA">Marathon Digital (MARA)</option>
+                        <option value="RIOT">Riot Platforms (RIOT)</option>
+                    </select>
+
                     <!-- 新增：與 BTC 比較開關 -->
                     <label class="flex items-center space-x-2 cursor-pointer bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition">
                         <input type="checkbox" id="compareBtcToggle" onchange="toggleBtcCompare()" class="rounded text-orange-500 focus:ring-orange-500 w-4 h-4">
@@ -94,8 +100,9 @@
                     <!-- 原有：指標選擇器 -->
                     <select id="indicatorSelect" onchange="switchIndicator(this.value)" class="bg-slate-50 border border-slate-300 text-slate-700 py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium transition-colors cursor-pointer">
                         <option value="premium">Premium to NAV (溢價百分比)</option>
+                        <option value="discount">Discount to NAV (折價百分比)</option>
                         <option value="mnav">mNAV (比特幣持倉總價值)</option>
-                        <option value="stock">MSTR 估算股價 (USD)</option>
+                        <option value="stock">估算股價 (USD)</option>
                     </select>
                 </div>
             </div>
@@ -135,18 +142,23 @@
         // ⚠️ 為了資安，已將 apiKey 移除。改為由後端環境變數提供。
         let chartInstance = null;
         
+        // 公司基礎數據庫 (模擬財報資料)
+        const companyProfiles = {
+            'MSTR': { btcHoldings: 214400, shares: 17500000, name: 'MicroStrategy', baseVolatility: 1.2 },
+            'MARA': { btcHoldings: 26842, shares: 280000000, name: 'Marathon Digital', baseVolatility: 0.9 },
+            'RIOT': { btcHoldings: 9084, shares: 230000000, name: 'Riot Platforms', baseVolatility: 0.85 }
+        };
+        let currentCompany = 'MSTR';
+        let rawBtcKlines = []; // 暫存 Binance 原始數據
+        
         // 儲存從 API 抓回來的所有原始資料 (最大 90 天)
-        let masterData = { dates: [], btcPrices: [], mstrPrices: [], premiums: [], mnavs: [] }; 
+        let masterData = { dates: [], btcPrices: [], stockPrices: [], premiums: [], discounts: [], mnavs: [] }; 
         // 當前過濾後要顯示的資料
         let currentDisplayData = {}; 
 
         let currentIndicator = 'premium'; // 追蹤目前選擇的指標
         let currentDays = 30; // 預設顯示天數
         let showBtcCompare = false; // 是否顯示 BTC 對比線
-
-        // MSTR 的大約財報數據 (用於計算基準)
-        const MSTR_BTC_HOLDINGS = 214400; 
-        const MSTR_SHARES_OUTSTANDING = 17500000; 
 
         // ==========================================
         // 模組 1: 資料獲取與計算 (Data Collection)
@@ -156,53 +168,68 @@
                 // 改為一次抓取 90 天的資料
                 const binanceUrl = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=90';
                 const response = await fetch(binanceUrl);
-                const btcKlines = await response.json();
+                rawBtcKlines = await response.json();
 
-                const dates = [], btcPrices = [], premiums = [], mstrPrices = [], mnavs = [];
-
-                btcKlines.forEach(kline => {
-                    const date = new Date(kline[0]).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
-                    const btcClosePrice = parseFloat(kline[4]);
-                    
-                    dates.push(date);
-                    btcPrices.push(btcClosePrice);
-
-                    const mnavBillion = (btcClosePrice * MSTR_BTC_HOLDINGS) / 1000000000;
-                    mnavs.push(mnavBillion.toFixed(2));
-
-                    const randomVolatility = 1.1 + (Math.random() * 0.4); 
-                    const navPerShare = (btcClosePrice * MSTR_BTC_HOLDINGS) / MSTR_SHARES_OUTSTANDING;
-                    const simulatedMstrPrice = navPerShare * randomVolatility; 
-                    
-                    mstrPrices.push(simulatedMstrPrice.toFixed(2));
-
-                    const premium = (simulatedMstrPrice / navPerShare) - 1;
-                    premiums.push((premium * 100).toFixed(2));
-                });
-
-                masterData = { dates, btcPrices, mstrPrices, premiums, mnavs };
-                
-                // 處理 UI 卡片 (永遠顯示最新一天的數據)
-                updateStatCards();
-                // 根據當前設定 (30天) 更新圖表
-                applyFiltersAndRender();
-
+                processCompanyData();
             } catch (error) {
                 console.error("獲取資料失敗:", error);
                 document.getElementById('premiumCard').innerText = "載入失敗";
             }
         }
 
+        function processCompanyData() {
+            const dates = [], btcPrices = [], premiums = [], discounts = [], stockPrices = [], mnavs = [];
+            const profile = companyProfiles[currentCompany];
+
+            rawBtcKlines.forEach(kline => {
+                const date = new Date(kline[0]).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+                const btcClosePrice = parseFloat(kline[4]);
+                
+                dates.push(date);
+                btcPrices.push(btcClosePrice);
+
+                const mnavBillion = (btcClosePrice * profile.btcHoldings) / 1000000000;
+                mnavs.push(mnavBillion.toFixed(2));
+
+                // 模擬股價：根據公司的基底波動率與 BTC 價格換算
+                const randomVolatility = profile.baseVolatility + (Math.random() * 0.3 - 0.15); 
+                const navPerShare = (btcClosePrice * profile.btcHoldings) / profile.shares;
+                const simulatedStockPrice = navPerShare * randomVolatility; 
+                
+                stockPrices.push(simulatedStockPrice.toFixed(2));
+
+                const premium = (simulatedStockPrice / navPerShare) - 1;
+                premiums.push((premium * 100).toFixed(2));
+
+                // 新增：計算 Discount to NAV (折價百分比 = 1 - 股價/淨值)
+                const discount = 1 - (simulatedStockPrice / navPerShare);
+                discounts.push((discount * 100).toFixed(2));
+            });
+
+            masterData = { dates, btcPrices, stockPrices, premiums, discounts, mnavs };
+            
+            updateStatCards();
+            applyFiltersAndRender();
+        }
+
         function updateStatCards() {
             const latestIndex = masterData.btcPrices.length - 1;
             document.getElementById('btcPriceCard').innerText = `$${masterData.btcPrices[latestIndex].toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('mstrPriceCard').innerText = `$${parseFloat(masterData.mstrPrices[latestIndex]).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('stockPriceCard').innerText = `$${parseFloat(masterData.stockPrices[latestIndex]).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             document.getElementById('premiumCard').innerText = `${masterData.premiums[latestIndex]}%`;
         }
 
         // ==========================================
-        // 互動邏輯 (切換指標、時間、對比)
+        // 互動邏輯 (切換指標、時間、對比、公司)
         // ==========================================
+        function switchCompany(companyKey) {
+            currentCompany = companyKey;
+            // 更新 UI 標題
+            document.getElementById('stockCardTitle').innerText = `估算 ${companyKey} 股價 (USD)`;
+            // 重新處理數據與繪圖
+            processCompanyData();
+        }
+
         function switchIndicator(indicatorType) {
             currentIndicator = indicatorType;
             applyFiltersAndRender();
@@ -233,8 +260,9 @@
             currentDisplayData = {
                 dates: masterData.dates.slice(-currentDays),
                 btcPrices: masterData.btcPrices.slice(-currentDays),
-                mstrPrices: masterData.mstrPrices.slice(-currentDays),
+                stockPrices: masterData.stockPrices.slice(-currentDays),
                 premiums: masterData.premiums.slice(-currentDays),
+                discounts: masterData.discounts.slice(-currentDays),
                 mnavs: masterData.mnavs.slice(-currentDays)
             };
 
@@ -242,10 +270,12 @@
             switch(currentIndicator) {
                 case 'premium':
                     data = currentDisplayData.premiums; label = 'Premium to NAV'; unit = '%'; colorArray = [59, 130, 246]; break;
+                case 'discount':
+                    data = currentDisplayData.discounts; label = 'Discount to NAV'; unit = '%'; colorArray = [239, 68, 68]; break;
                 case 'mnav':
                     data = currentDisplayData.mnavs; label = 'mNAV'; unit = 'B'; colorArray = [16, 185, 129]; break;
                 case 'stock':
-                    data = currentDisplayData.mstrPrices; label = '估算股價'; unit = '$'; colorArray = [139, 92, 246]; break;
+                    data = currentDisplayData.stockPrices; label = `${currentCompany} 估算股價`; unit = '$'; colorArray = [139, 92, 246]; break;
             }
 
             renderChart(currentDisplayData.dates, data, label, unit, colorArray, currentDisplayData.btcPrices);
@@ -387,16 +417,18 @@
                 let currentData, indicatorName, unitLabel;
                 switch(currentIndicator) {
                     case 'premium': currentData = currentDisplayData.premiums; indicatorName = "Premium to NAV"; unitLabel = "%"; break;
+                    case 'discount': currentData = currentDisplayData.discounts; indicatorName = "Discount to NAV"; unitLabel = "%"; break;
                     case 'mnav': currentData = currentDisplayData.mnavs; indicatorName = "mNAV"; unitLabel = " 十億美元"; break;
-                    case 'stock': currentData = currentDisplayData.mstrPrices; indicatorName = "估算股價"; unitLabel = " USD"; break;
+                    case 'stock': currentData = currentDisplayData.stockPrices; indicatorName = "估算股價"; unitLabel = " USD"; break;
                 }
 
                 const latestValue = currentData[currentData.length - 1];
                 const avgValue = (currentData.reduce((a, b) => parseFloat(a) + parseFloat(b), 0) / currentDays).toFixed(2);
                 const btcLatest = currentDisplayData.btcPrices[currentDisplayData.btcPrices.length - 1];
+                const companyName = companyProfiles[currentCompany].name;
                 
                 // 動態調整 AI 提示詞
-                let prompt = `請分析 MicroStrategy (MSTR) 近 ${currentDays} 天的「${indicatorName}」財務指標：\n`;
+                let prompt = `請分析 ${companyName} (${currentCompany}) 近 ${currentDays} 天的「${indicatorName}」財務指標：\n`;
                 prompt += `- 最新數值: ${latestValue}${unitLabel}\n- 平均數值: ${avgValue}${unitLabel}\n- 最新比特幣價格: $${btcLatest}\n`;
                 
                 if(showBtcCompare) {
