@@ -19,10 +19,16 @@ export default async function handler(req, res) {
     // 1. 抓取 Yahoo Finance 歷史股價
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${from}&period2=${to}&interval=1d`;
     const chartResponse = await fetch(chartUrl, fetchOptions);
+    if (!chartResponse.ok) {
+      const errorText = await chartResponse.text(); // 這樣就不會觸發 JSON 解析錯誤
+      throw new Error(`Yahoo 歷史股價 API 拒絕請求，狀態碼: ${chartResponse.status}, 訊息: ${errorText}`);
+    }
+
+    // 確認沒問題後，再解析 JSON
     const chartResult = await chartResponse.json();
 
-    if (!chartResponse.ok || !chartResult.chart.result) {
-      throw new Error(`無法獲取歷史股價，狀態碼: ${chartResponse.status}`);
+    if (!chartResult.chart?.result) {
+      throw new Error("Yahoo 歷史股價資料格式不符預期");
     }
     const chart = chartResult.chart.result[0];
 
