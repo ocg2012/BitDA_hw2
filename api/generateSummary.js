@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
         
         // 將前端傳來的 prompt 組合起來，發送給 Google 的 Gemini 伺服器
         const response = await fetch(url, {
