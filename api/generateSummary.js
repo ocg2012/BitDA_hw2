@@ -16,10 +16,9 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 🌟 終極退路：使用最基礎的 gemini-pro (1.0) 模型，這個模型 100% 所有帳號都能用
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-        
-        // 將系統設定合併到 prompt 裡面，因為 gemini-pro 不支援 systemInstruction 參數
+        // 🌟 終極退路：使用最基礎的 gemini-2.5-flash 模型，這個模型 100% 所有帳號都能用
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        // 將系統設定合併到 prompt 裡面，因為 gemini-2.5-flash 不支援 systemInstruction 參數
         const fullPrompt = "你是一個專業、客觀的加密貨幣與傳統金融市場分析師。\n\n" + prompt;
 
         const response = await fetch(url, {
