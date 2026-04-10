@@ -54,8 +54,8 @@ export default async function handler(req, res) {
     // 定義各公司的備用預設值 (如果 API 臨時壞掉，網頁才不會整組當掉)
     const fallbacks = {
       'MSTR': { shares: 345600000, btc: 766970 },   // 2026/04 真實股數與持倉量
-      'MARA': { shares: 320000000, btc: 26842 },
-      'RIOT': { shares: 310000000, btc: 9024 }
+      'MARA': { shares: 380234635, btc: 38689 },
+      'RIOT': { shares: 379125849, btc: 15680 }
     };
 
     // 4. 統一打包傳回給前端 (如果有抓到就用動態的，沒抓到就用備用值)
