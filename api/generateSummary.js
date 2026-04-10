@@ -1,5 +1,4 @@
 // 這是運行在 Vercel 伺服器上的後端程式碼 (Node.js)
-// 它的功用是：安全地讀取環境變數中的 API Key，代替前端去呼叫 Gemini API
 
 export default async function handler(req, res) {
     // 只允許 POST 請求
@@ -9,7 +8,7 @@ export default async function handler(req, res) {
 
     const { prompt } = req.body;
 
-    // 🏆 安全核心：從 Vercel 的環境變數中讀取 API Key (前端絕對看不到這個)
+    // 從 Vercel 的環境變數中讀取 API Key
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -17,9 +16,9 @@ export default async function handler(req, res) {
     }
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // 🌟 修改這裡：換成帶有 -latest 後綴的穩定模型名稱
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
         
-        // 將前端傳來的 prompt 組合起來，發送給 Google 的 Gemini 伺服器
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -31,12 +30,11 @@ export default async function handler(req, res) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Google API 回應錯誤: ${errorText}`);
+            throw new Error(errorText);
         }
 
         const data = await response.json();
         
-        // 將 Google 算好的結果原封不動傳回給前端
         res.status(200).json(data);
 
     } catch (error) {
