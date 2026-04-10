@@ -27,7 +27,7 @@
         <header class="mb-8">
             <h1 class="text-3xl font-bold text-slate-900 mb-2">DAT.co 財務指標分析儀表板</h1>
             <p class="text-slate-500 max-w-3xl">
-                此儀表板同步串接 Binance 與 Finnhub API，自動抓取最新<strong>發行股數</strong>與<strong>歷史價格</strong>，計算精確的資產淨值折溢價。
+                此儀表板同步串接 Binance 與後端金融 API，自動抓取最新<strong>發行股數</strong>與<strong>歷史價格</strong>，計算精確的資產淨值折溢價。
             </p>
         </header>
 
@@ -41,7 +41,7 @@
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                 <div id="stockCardTitle" class="text-sm font-medium text-slate-500 mb-1">真實 MSTR 股價 (USD)</div>
                 <div id="stockPriceCard" class="text-3xl font-bold text-slate-800">載入中...</div>
-                <div class="text-xs text-slate-400 mt-2">資料來源: Finnhub API</div>
+                <div class="text-xs text-slate-400 mt-2">資料來源: Yahoo Finance</div>
             </div>
             <div class="bg-blue-50 rounded-xl shadow-sm border border-blue-100 p-6 relative overflow-hidden">
                 <div class="text-sm font-medium text-blue-600 mb-1">當前 Premium to NAV</div>
@@ -111,7 +111,7 @@
     <script>
         let chartInstance = null;
         
-        // 初始靜態配置 (做為 API 失敗時的備用數據 Fallback)
+        // 初始靜態配置 (做為後端 API 抓取失敗時的備用數據 Fallback)
         const companyProfiles = {
             'MSTR': { btcHoldings: 252220, shares: 202000000, name: 'MicroStrategy' },
             'MARA': { btcHoldings: 26842, shares: 280000000, name: 'Marathon Digital' },
@@ -131,7 +131,6 @@
         async function fetchFinancialData() {
             try {
                 document.getElementById('dynamicSharesText').innerText = "正在同步最新股數與持倉數據...";
-
                 let isHoldingsDynamic = false;
                 let isSharesDynamic = false;
 
@@ -140,41 +139,11 @@
                 if (!btcRes.ok) throw new Error('無法獲取比特幣價格資料');
                 rawBtcKlines = await btcRes.json();
 
-                // 2. 🔥 前端直接動態抓取 CoinGecko 企業 BTC 持倉
-                try {
-                    const cgRes = await fetch('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
-                    if (cgRes.ok) {
-                        const cgData = await cgRes.json();
-                        const treasury = cgData.companies.find(c => c.symbol.toLowerCase() === currentCompany.toLowerCase());
-                        if (treasury && treasury.total_holdings) {
-                            companyProfiles[currentCompany].btcHoldings = treasury.total_holdings;
-                            isHoldingsDynamic = true;
-                            console.log(`[成功] 動態抓取 ${currentCompany} 持倉量:`, treasury.total_holdings);
-                        }
-                    }
-                } catch (e) {
-                    console.warn("無法動態獲取比特幣持倉，將使用預設靜態值", e);
-                }
-
-                // 3. 🔥 前端直接動態抓取 Yahoo Finance 發行股數 (支援跨域)
-                try {
-                    const yhRes = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${currentCompany}`);
-                    if (yhRes.ok) {
-                        const yhData = await yhRes.json();
-                        const shares = yhData.quoteResponse?.result?.[0]?.sharesOutstanding;
-                        if (shares) {
-                            companyProfiles[currentCompany].shares = shares;
-                            isSharesDynamic = true;
-                            console.log(`[成功] 動態抓取 ${currentCompany} 發行股數:`, shares);
-                        }
-                    }
-                } catch (e) {
-                    console.warn("無法動態獲取發行股數，將使用預設靜態值", e);
-                }
-
-                // 4. 獲取後端歷史股價資料 (原流程不變)
+                // 2. 時間戳計算
                 const fromTime = Math.floor(rawBtcKlines[0][0] / 1000) - (86400 * 5); 
                 const toTime = Math.floor(Date.now() / 1000);
+
+                // 3. 呼叫你的 Vercel 後端 (後端會同時幫我們抓取歷史股價、最新股數、BTC持倉)
                 const stockRes = await fetch('/api/getStockData', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -184,16 +153,31 @@
                 if (!stockRes.ok) throw new Error(`API 請求失敗: ${stockRes.status}`);
                 const stockData = await stockRes.json();
 
+                // 4. 解析後端傳來的動態資料
+                if (stockData.info) {
+                    // 動態更新發行股數
+                    if (stockData.info.sharesOutstanding) {
+                        companyProfiles[currentCompany].shares = stockData.info.sharesOutstanding;
+                        isSharesDynamic = true;
+                    }
+                    // 動態更新比特幣持倉
+                    if (stockData.info.btcHoldings) {
+                        companyProfiles[currentCompany].btcHoldings = stockData.info.btcHoldings;
+                        isHoldingsDynamic = true;
+                    }
+                }
+
                 // 5. 更新 UI 顯示動態抓取狀態
                 const sharesVal = (companyProfiles[currentCompany].shares / 1000000).toFixed(2) + 'M';
                 const holdingsVal = companyProfiles[currentCompany].btcHoldings.toLocaleString();
                 
-                // 動態決定標籤顏色 (綠色代表抓取成功即時數據，灰色代表使用預設)
+                // 根據是否為動態資料給予不同的文字顏色標示
                 const sharesHTML = isSharesDynamic ? `<span class="text-emerald-600 font-bold">${sharesVal} (即時)</span>` : `<span class="text-slate-500">${sharesVal} (靜態預設)</span>`;
                 const holdingsHTML = isHoldingsDynamic ? `<span class="text-emerald-600 font-bold">${holdingsVal} BTC (即時)</span>` : `<span class="text-slate-500">${holdingsVal} BTC (靜態預設)</span>`;
                 
                 document.getElementById('dynamicSharesText').innerHTML = `計算參數: 股數 ${sharesHTML} | 持倉 ${holdingsHTML}`;
 
+                // 6. 處理圖表資料
                 processCompanyData(stockData);
 
             } catch (error) {
@@ -328,7 +312,7 @@
             });
         }
 
-        // AI 摘要
+        // AI 摘要生成
         async function generateSummary() {
             const content = document.getElementById('aiSummaryContent');
             const errorMsg = document.getElementById('aiErrorMsg');
